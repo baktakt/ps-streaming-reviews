@@ -70,4 +70,20 @@ async function getGameDetails(rawgId) {
   }
 }
 
-module.exports = { searchGame, getGameDetails };
+async function getGameScreenshots(rawgId) {
+  if (!API_KEY || !rawgId) return [];
+
+  try {
+    const response = await axios.get(`${RAWG_BASE}/games/${rawgId}/screenshots`, {
+      params: { key: API_KEY, page_size: 20 },
+      timeout: 8000,
+    });
+
+    return response.data?.results?.map((s) => s.image) || [];
+  } catch (err) {
+    console.warn(`RAWG screenshots failed for id ${rawgId}:`, err.message);
+    return [];
+  }
+}
+
+module.exports = { searchGame, getGameDetails, getGameScreenshots };

@@ -1,8 +1,8 @@
 const express = require('express');
 const NodeCache = require('node-cache');
 const { fetchAllGames } = require('../services/playstationService');
-const { searchGame: rawgSearch, getGameDetails } = require('../services/rawgService');
-const { searchGame: ocSearch, getGameScores } = require('../services/openCriticService');
+const { searchGame: rawgSearch, getGameDetails, getGameScreenshots } = require('../services/rawgService');
+const { searchGame: ocSearch, getGameScores, getGameReviews } = require('../services/openCriticService');
 const SEED_GAMES = require('../data/seedGames');
 
 const router = express.Router();
@@ -75,22 +75,24 @@ router.get('/:id/details', async (req, res) => {
   // Enrich with RAWG data
   const rawgBasic = await rawgSearch(game.title);
   if (rawgBasic) {
-    const rawgDetails = await getGameDetails(rawgBasic.rawgId);
-    if (rawgDetails) {
-      Object.assign(enriched, rawgDetails);
-    } else {
-      Object.assign(enriched, rawgBasic);
-    }
+    const [rawgDetails, rawgScreenshots] = await Promise.all([
+      getGameDetails(rawgBasic.rawgId),
+      getGameScreenshots(rawgBasic.rawgId),
+    ]);
+    Object.assign(enriched, rawgDetails || rawgBasic);
+    if (rawgScreenshots.length > 0) enriched.screenshots = rawgScreenshots;
   }
 
-  // Enrich with OpenCritic scores
+  // Enrich with OpenCritic scores + reviews
   const ocBasic = await ocSearch(game.title);
   if (ocBasic) {
-    await sleep(200); // gentle rate limit
-    const ocScores = await getGameScores(ocBasic.openCriticId);
-    if (ocScores) {
-      Object.assign(enriched, ocScores);
-    }
+    await sleep(200);
+    const [ocScores, ocReviews] = await Promise.all([
+      getGameScores(ocBasic.openCriticId),
+      getGameReviews(ocBasic.openCriticId),
+    ]);
+    if (ocScores) Object.assign(enriched, ocScores);
+    enriched.reviews = ocReviews;
   }
 
   detailCache.set(cacheKey, enriched);
@@ -122,14 +124,14 @@ router.post('/enrich-batch', async (req, res) => {
 
     const enriched = { ...game };
 
-    // RAWG enrichment
+    // RAWG enrichment (screenshots fetched on-demand in details endpoint, not batch)
     const rawgBasic = await rawgSearch(game.title);
     if (rawgBasic) {
       const rawgDetails = await getGameDetails(rawgBasic.rawgId);
       Object.assign(enriched, rawgDetails || rawgBasic);
     }
 
-    // OpenCritic enrichment
+    // OpenCritic enrichment (reviews fetched on-demand in details endpoint, not batch)
     const ocBasic = await ocSearch(game.title);
     if (ocBasic) {
       await sleep(300);

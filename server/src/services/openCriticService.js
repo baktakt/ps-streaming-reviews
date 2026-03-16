@@ -53,4 +53,32 @@ async function getGameScores(openCriticId) {
   }
 }
 
-module.exports = { searchGame, getGameScores };
+async function getGameReviews(openCriticId, take = 12) {
+  if (!openCriticId) return [];
+
+  try {
+    const response = await axios.get(`${OC_BASE}/review`, {
+      params: { game: openCriticId, skip: 0, take },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PSPortalApp/1.0)',
+        'Accept': 'application/json',
+      },
+      timeout: 8000,
+    });
+
+    return (response.data || []).map((r) => ({
+      outlet: r.Outlet?.name || null,
+      author: r.Authors?.[0]?.name || null,
+      score: r.score ?? null,
+      scoreDisplay: r.ScoreFormat?.displayValue || null,
+      snippet: r.snippet || null,
+      externalUrl: r.externalUrl || null,
+      publishedDate: r.publishedDate || null,
+    })).filter((r) => r.externalUrl);
+  } catch (err) {
+    console.warn(`OpenCritic reviews failed for id ${openCriticId}:`, err.message);
+    return [];
+  }
+}
+
+module.exports = { searchGame, getGameScores, getGameReviews };
