@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-gray-950 text-gray-100 min-h-screen;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@layer components {
+  .card-hover {
+    @apply transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-800/20;
+  }
+
+  .filter-chip {
+    @apply px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 cursor-pointer select-none whitespace-nowrap;
+  }
+
+  .filter-chip-active {
+    @apply bg-blue-600 border-blue-600 text-white;
+  }
+
+  .filter-chip-inactive {
+    @apply bg-gray-800 border-gray-700 text-gray-300 hover:border-blue-500 hover:text-white;
+  }
+}
+
+/* Skeleton shimmer */
+.loading-shimmer {
+  background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #030712; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 9999px; }
