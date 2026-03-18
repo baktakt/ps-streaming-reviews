@@ -1,15 +1,16 @@
 const express = require('express');
-const NodeCache = require('node-cache');
 const { fetchAllGames } = require('../services/playstationService');
 const { searchGame: rawgSearch, getGameDetails, getGameScreenshots } = require('../services/rawgService');
 const { searchGame: ocSearch, getGameScores, getGameReviews } = require('../services/openCriticService');
+const { BlobCache } = require('../services/blobCache');
 const SEED_GAMES = require('../data/seedGames');
 
 const router = express.Router();
 
 // Cache: game list for 1 hour, enriched details for 24 hours
-const listCache = new NodeCache({ stdTTL: 3600 });
-const detailCache = new NodeCache({ stdTTL: 86400 });
+// L1 = in-memory, L2 = Vercel Blob (persistent across restarts)
+const listCache = new BlobCache({ stdTTL: 3600, prefix: 'ps-portal/list/' });
+const detailCache = new BlobCache({ stdTTL: 86400, prefix: 'ps-portal/details/' });
 
 // Throttle helper to avoid hammering APIs
 function sleep(ms) {
@@ -18,7 +19,7 @@ function sleep(ms) {
 
 // GET /api/games - return list of all streamable games
 router.get('/', async (req, res) => {
-  const cached = listCache.get('games');
+  const cached = await listCache.get('games');
   if (cached) {
     return res.json(cached);
   }
@@ -48,7 +49,7 @@ router.get('/', async (req, res) => {
     return true;
   });
 
-  listCache.set('games', games);
+  await listCache.set('games', games);
   res.json(games);
 });
 
@@ -57,13 +58,13 @@ router.get('/:id/details', async (req, res) => {
   const { id } = req.params;
   const cacheKey = `details:${id}`;
 
-  const cached = detailCache.get(cacheKey);
+  const cached = await detailCache.get(cacheKey);
   if (cached) {
     return res.json(cached);
   }
 
   // Find the game in our list
-  const listGames = listCache.get('games') || SEED_GAMES;
+  const listGames = (await listCache.get('games')) || SEED_GAMES;
   const game = listGames.find((g) => g.id === id);
 
   if (!game) {
@@ -95,7 +96,7 @@ router.get('/:id/details', async (req, res) => {
     enriched.reviews = ocReviews;
   }
 
-  detailCache.set(cacheKey, enriched);
+  await detailCache.set(cacheKey, enriched);
   res.json(enriched);
 });
 
@@ -107,13 +108,13 @@ router.post('/enrich-batch', async (req, res) => {
     return res.status(400).json({ error: 'ids array required' });
   }
 
-  const listGames = listCache.get('games') || SEED_GAMES;
+  const listGames = (await listCache.get('games')) || SEED_GAMES;
   const results = {};
 
   for (const id of ids.slice(0, 20)) {
     // cap at 20 per batch
     const cacheKey = `details:${id}`;
-    const cached = detailCache.get(cacheKey);
+    const cached = await detailCache.get(cacheKey);
     if (cached) {
       results[id] = cached;
       continue;
@@ -139,7 +140,7 @@ router.post('/enrich-batch', async (req, res) => {
       if (ocScores) Object.assign(enriched, ocScores);
     }
 
-    detailCache.set(cacheKey, enriched);
+    await detailCache.set(cacheKey, enriched);
     results[id] = enriched;
     await sleep(200);
   }
@@ -152,7 +153,7 @@ router.get('/enrich/:title', async (req, res) => {
   const title = decodeURIComponent(req.params.title);
   const cacheKey = `enrich:${title.toLowerCase()}`;
 
-  const cached = detailCache.get(cacheKey);
+  const cached = await detailCache.get(cacheKey);
   if (cached) return res.json(cached);
 
   const enriched = { title };
@@ -170,7 +171,7 @@ router.get('/enrich/:title', async (req, res) => {
     if (ocScores) Object.assign(enriched, ocScores);
   }
 
-  detailCache.set(cacheKey, enriched);
+  await detailCache.set(cacheKey, enriched);
   res.json(enriched);
 });
 
