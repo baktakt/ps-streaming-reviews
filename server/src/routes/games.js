@@ -102,6 +102,7 @@ router.get('/:id/details', async (req, res) => {
 
 // POST /api/games/enrich-batch - enrich multiple games in one call
 // Accepts { ids: string[] }
+// Processes all games concurrently to stay within Vercel's function timeout.
 router.post('/enrich-batch', async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -111,39 +112,38 @@ router.post('/enrich-batch', async (req, res) => {
   const listGames = (await listCache.get('games')) || SEED_GAMES;
   const results = {};
 
-  for (const id of ids.slice(0, 20)) {
-    // cap at 20 per batch
-    const cacheKey = `details:${id}`;
-    const cached = await detailCache.get(cacheKey);
-    if (cached) {
-      results[id] = cached;
-      continue;
-    }
+  await Promise.allSettled(
+    ids.slice(0, 20).map(async (id) => {
+      const cacheKey = `details:${id}`;
+      const cached = await detailCache.get(cacheKey);
+      if (cached) {
+        results[id] = cached;
+        return;
+      }
 
-    const game = listGames.find((g) => g.id === id);
-    if (!game) continue;
+      const game = listGames.find((g) => g.id === id);
+      if (!game) return;
 
-    const enriched = { ...game };
+      const enriched = { ...game };
 
-    // RAWG enrichment (screenshots fetched on-demand in details endpoint, not batch)
-    const rawgBasic = await rawgSearch(game.title);
-    if (rawgBasic) {
-      const rawgDetails = await getGameDetails(rawgBasic.rawgId);
-      Object.assign(enriched, rawgDetails || rawgBasic);
-    }
+      // RAWG enrichment (screenshots fetched on-demand in details endpoint, not batch)
+      const rawgBasic = await rawgSearch(game.title);
+      if (rawgBasic) {
+        const rawgDetails = await getGameDetails(rawgBasic.rawgId);
+        Object.assign(enriched, rawgDetails || rawgBasic);
+      }
 
-    // OpenCritic enrichment (reviews fetched on-demand in details endpoint, not batch)
-    const ocBasic = await ocSearch(game.title);
-    if (ocBasic) {
-      await sleep(300);
-      const ocScores = await getGameScores(ocBasic.openCriticId);
-      if (ocScores) Object.assign(enriched, ocScores);
-    }
+      // OpenCritic enrichment (reviews fetched on-demand in details endpoint, not batch)
+      const ocBasic = await ocSearch(game.title);
+      if (ocBasic) {
+        const ocScores = await getGameScores(ocBasic.openCriticId);
+        if (ocScores) Object.assign(enriched, ocScores);
+      }
 
-    await detailCache.set(cacheKey, enriched);
-    results[id] = enriched;
-    await sleep(200);
-  }
+      await detailCache.set(cacheKey, enriched);
+      results[id] = enriched;
+    })
+  );
 
   res.json(results);
 });

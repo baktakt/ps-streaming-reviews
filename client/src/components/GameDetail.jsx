@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, ExternalLink, Clock, Users, Trophy, Gamepad2, ChevronRight, Image } from 'lucide-react';
+import { X, ExternalLink, Users, Trophy, Gamepad2, ChevronRight, Image } from 'lucide-react';
 import { fetchGameDetails } from '../lib/api';
 import ScoreBadge from './ScoreBadge';
 
@@ -20,18 +20,17 @@ function StatBox({ icon: Icon, label, value }) {
   );
 }
 
-function ScoreChip({ score, scoreDisplay }) {
+function ScoreChip({ score }) {
   if (score === null || score === undefined) return null;
-  // Scores can be 0-100 or 0-10 depending on outlet
-  const normalised = score > 10 ? score : Math.round(score * 10);
+  // OpenCritic normalises all scores to 0–100
   const color =
-    normalised >= 80 ? 'bg-green-600' :
-    normalised >= 60 ? 'bg-blue-600' :
-    normalised >= 40 ? 'bg-yellow-500 text-gray-900' :
+    score >= 80 ? 'bg-green-600' :
+    score >= 60 ? 'bg-blue-600' :
+    score >= 40 ? 'bg-yellow-500 text-gray-900' :
     'bg-red-600';
   return (
     <span className={`inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-lg text-sm font-bold text-white ${color}`}>
-      {scoreDisplay || score}
+      {Math.round(score)}
     </span>
   );
 }
@@ -56,7 +55,7 @@ function ReviewCard({ review }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <ScoreChip score={review.score} scoreDisplay={review.scoreDisplay} />
+          <ScoreChip score={review.score} />
           <ExternalLink size={14} className="text-gray-500 group-hover:text-blue-400 transition-colors" />
         </div>
       </div>
@@ -191,11 +190,10 @@ export default function GameDetail({ game, onClose }) {
         </div>
 
         {/* Stats grid */}
-        {!isLoading && (
-          <div className="grid grid-cols-3 gap-2 mb-5">
+        {!isLoading && (enriched.openCriticScore || enriched.openCriticNumReviews) && (
+          <div className="grid grid-cols-2 gap-2 mb-5">
             <StatBox icon={Trophy} label="OpenCritic" value={enriched.openCriticScore ? `${Math.round(enriched.openCriticScore)}` : null} />
             <StatBox icon={Users} label="Reviews" value={enriched.openCriticNumReviews} />
-            <StatBox icon={Clock} label="Avg playtime" value={enriched.playtime ? `${enriched.playtime}h` : null} />
           </div>
         )}
 
@@ -303,6 +301,21 @@ export default function GameDetail({ game, onClose }) {
                 <ExternalLink size={14} />
               </a>
             )}
+          </div>
+        ) : enriched.openCriticUrl ? (
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold text-gray-300 mb-3">Critic Reviews</h2>
+            <a
+              href={enriched.openCriticUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 bg-gray-800 rounded-2xl text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border border-gray-700"
+            >
+              {enriched.openCriticNumReviews
+                ? `Read all ${enriched.openCriticNumReviews} reviews on OpenCritic`
+                : 'Read reviews on OpenCritic'}
+              <ExternalLink size={14} />
+            </a>
           </div>
         ) : null}
 
